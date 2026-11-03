@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UV-Vis Abs Finder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* White, airy lab-instrument look: one ink colour, hairlines, and a thin visible-spectrum strip as the only colour flourish. */
+:root {
+  color-scheme: light;
+  --bg: #ffffff; --panel: #ffffff; --fg: #0f2233; --muted: #66768a; --line: #e6ebf1; --grid: #eff3f7;
+  --accent: #123f6d; --accent-ink: #ffffff; --accent-soft: #eff4fa; --trace: #c5d0dc;
+  --warn: #8a5a00; --warn-soft: #fdf6e3; --bad: #b3382e; --bad-soft: #fcecea;
+  --sans: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+}
+* { box-sizing: border-box }
+html, body { margin: 0 }
+[hidden] { display: none !important }
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased }
+.strip { height: 4px; background: linear-gradient(90deg, #5b2a9d, #2b3fd6 16%, #1496d4 32%, #1fb56b 48%, #e4d21f 62%, #f08a1d 76%, #d92a2a 92%, #7c1414) }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 24px }
+h1 { font-size: 30px; font-weight: 600; margin: 0; letter-spacing: -.02em; line-height: 1.2 }
+h2 { font-size: 14px; font-weight: 600; margin: 0 }
+button, input { font: inherit; color: inherit }
+button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 8px 16px; font-weight: 500; font-size: 14px; transition: border-color .15s, background .15s, box-shadow .15s }
+button:hover { border-color: var(--accent) }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink) }
+button.primary:hover { box-shadow: 0 4px 14px rgba(18,63,109,.25) }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.head { display: flex; flex-direction: column; gap: 6px }
+.head p { margin: 0; color: var(--muted) }
+
+.top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px }
+@media (max-width: 920px) { .top { grid-template-columns: minmax(0, 1fr) } }
+.drop { border: 1px dashed #c9d4e0; border-radius: 14px; background: #fafcfe; padding: 22px 24px;
+  display: flex; flex-direction: column; justify-content: center; gap: 14px; transition: border-color .15s, background .15s }
+.drop.over { border-color: var(--accent); background: var(--accent-soft) }
+.drop strong { font-weight: 600; font-size: 16px; display: block }
+.drop .sub { color: var(--muted); font-size: 13.5px; display: block }
+.btns { display: flex; flex-wrap: wrap; gap: 8px }
+.tally { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 13.5px; align-items: center; color: var(--muted) }
+.tally b { font-family: var(--mono); font-weight: 600; color: var(--fg) }
+.tally label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; margin-left: auto }
+.notice { font-size: 13.5px; background: var(--warn-soft); color: var(--warn); padding: 9px 14px; border-radius: 10px }
+
+.readoutbox { border: 1px solid var(--line); border-radius: 14px; padding: 18px 24px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 1px 2px rgba(15,34,51,.04), 0 10px 28px rgba(15,34,51,.05) }
+.readout { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px }
+.readout .field { display: flex; align-items: baseline; gap: 12px; flex: 1 1 220px; min-width: 0 }
+.readout label { font-size: 36px; font-weight: 300; color: var(--muted) }
+.readout input[type=text] { flex: 1; min-width: 0; background: transparent; border: 0; border-bottom: 1.5px solid var(--line);
+  color: var(--accent); font-size: 40px; font-weight: 500; letter-spacing: -.01em; padding: 0 2px; outline: none; transition: border-color .15s; font-variant-numeric: tabular-nums }
+.readout input[type=text]:focus { border-bottom-color: var(--accent) }
+.readout input::placeholder { color: var(--trace) }
+.readout .unit { font-size: 18px; color: var(--muted) }
+.seg { display: inline-flex; background: var(--grid); border-radius: 999px; padding: 3px }
+.seg button { background: transparent; border: 0; color: var(--muted); padding: 5px 13px; font-size: 13px }
+.seg button[aria-pressed=true] { background: var(--panel); color: var(--fg); box-shadow: 0 1px 3px rgba(15,34,51,.14) }
+.hint { font-size: 13px; color: var(--muted) }
+.hint.err { color: var(--bad) }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 20px; align-items: start }
+@media (max-width: 920px) { .main { grid-template-columns: minmax(0, 1fr) } }
+.pane { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; min-width: 0; overflow: hidden; box-shadow: 0 1px 2px rgba(15,34,51,.04), 0 10px 28px rgba(15,34,51,.05) }
+.pane > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 20px; border-bottom: 1px solid var(--line); min-height: 62px }
+.tablebox { overflow: auto; max-height: 580px }
+table { border-collapse: collapse; width: 100%; font-size: 14px }
+th { position: sticky; top: 0; background: var(--panel); text-align: left; font-weight: 500; font-size: 12.5px; color: var(--muted);
+  padding: 10px 20px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: pointer; user-select: none; z-index: 1 }
+th.num, td.num { text-align: right }
+td { padding: 11px 20px; border-bottom: 1px solid var(--grid); vertical-align: top }
+td.name { overflow-wrap: anywhere; min-width: 150px; font-weight: 500 }
+td.name small { display: block; color: var(--muted); font-size: 12.5px; font-weight: 400 }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: 500 }
+td.num small { display: block; font-family: var(--sans); font-size: 11.5px; font-weight: 400; color: var(--warn) }
+td.num .none { color: var(--muted); font-family: var(--sans); font-size: 12.5px; font-weight: 400 }
+tbody tr { cursor: pointer }
+tbody tr:hover td { background: #f8fafc }
+tbody tr.sel td { background: var(--accent-soft) }
+tbody tr.sel td.name { color: var(--accent) }
+.tag { display: inline-block; font-size: 11.5px; padding: 0 7px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); margin-left: 6px; font-weight: 400 }
+
+.chartbox { position: relative; padding: 14px 12px 4px }
+.chartbox svg { display: block; width: 100%; height: auto; touch-action: pan-y; cursor: crosshair }
+.chartbox svg text { font-family: var(--mono); font-size: 11.5px; fill: var(--muted) }
+.chartbox svg text.mk { fill: var(--accent); font-weight: 600 }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font-family: var(--mono); font-size: 12px;
+  padding: 4px 8px; border-radius: 6px; white-space: nowrap; transform: translate(-50%, -130%) }
+.selname { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; min-width: 0 }
+.foot { padding: 6px 20px 14px; font-size: 13px; color: var(--muted) }
+.foot:empty { display: none }
+details { border-top: 1px solid var(--line); padding: 12px 20px; font-size: 13.5px }
+details summary { cursor: pointer; font-weight: 500 }
+.raw { overflow: auto; max-height: 280px; margin-top: 8px }
+.raw th, .raw td { font-family: var(--mono); font-size: 12px; padding: 3px 8px; white-space: nowrap }
+.issues { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px }
+.issues li { overflow-wrap: anywhere }
+.issues span { color: var(--muted) }
+.empty { padding: 44px 20px; color: var(--muted); text-align: center }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important } }
+</style>
+</head>
+<body>
+<div class="strip"></div>
+<div class="wrap">
+  <div class="head">
+    <h1>UV-Vis Abs Finder</h1>
+    <p>Tra độ hấp thụ tại một bước sóng trên nhiều file cùng lúc. File chỉ được đọc trong trình duyệt của bạn.</p>
+  </div>
+
+  <div class="top">
+    <div class="drop" id="drop">
+      <div>
+        <strong>Thả file hoặc cả thư mục vào đây</strong>
+        <span class="sub">App tự lấy file Excel (.xlsx, .xls, .xlsm, .xlsb) và bỏ qua phần còn lại.</span>
+      </div>
+      <div class="btns">
+        <button class="primary" id="pickFiles" type="button">Chọn file</button>
+        <button id="pickFolder" type="button">Chọn thư mục</button>
+        <button id="clearAll" type="button">Xóa hết</button>
+      </div>
+      <input id="fileInput" type="file" multiple hidden>
+      <input id="folderInput" type="file" webkitdirectory multiple hidden>
+    </div>
+
+    <div class="readoutbox">
+      <form class="readout" id="form">
+        <div class="field">
+          <label for="lambda">λ</label>
+          <input id="lambda" type="text" inputmode="decimal" autocomplete="off" placeholder="664" value="664" aria-describedby="lambdaHint">
+          <span class="unit">nm</span>
+        </div>
+        <div class="seg" role="group" aria-label="Cách lấy giá trị khi file không có đúng bước sóng này">
+          <button type="button" id="modeInterp" aria-pressed="true">Nội suy</button>
+          <button type="button" id="modeNear" aria-pressed="false">Điểm gần nhất</button>
+        </div>
+      </form>
+      <div class="hint" id="lambdaHint">Nhập nhiều bước sóng bằng dấu phẩy hoặc khoảng trắng, ví dụ 260, 280. Số lẻ viết 664.5 hoặc 664,5.</div>
+    </div>
+  </div>
+
+  <div class="tally" id="tally"></div>
+  <div class="notice" id="demoNote">Đang hiển thị dữ liệu ví dụ (phổ xanh methylene giả lập). Dữ liệu này sẽ biến mất khi bạn thả file của mình vào.</div>
+
+  <div class="main">
+    <section class="pane">
+      <header>
+        <h2 id="resTitle">Kết quả</h2>
+        <div class="btns">
+          <button id="copyBtn" type="button">Sao chép sang Excel</button>
+          <button class="primary" id="saveBtn" type="button">Tải .xlsx</button>
+        </div>
+      </header>
+      <div class="tablebox" id="tableBox"></div>
+      <div class="foot" id="actionMsg" role="status"></div>
+    </section>
+
+    <section class="pane">
+      <header><div class="selname" id="selName"></div></header>
+      <div class="chartbox" id="chartBox"></div>
+      <div class="foot">Đường đậm là phổ đang chọn. Bấm một dòng trong bảng để đổi phổ, bấm lên đồ thị để lấy bước sóng đó.</div>
+      <details id="rawBox"><summary>Xem nội dung file</summary><div class="raw" id="raw"></div></details>
+      <details id="issueBox"><summary id="issueSum"></summary><ul class="issues" id="issues"></ul></details>
+    </section>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const EXCEL = /\.(xlsx|xls|xlsm|xlsb)$/i, CSV = /\.csv$/i;
+const RE_WL = /wave\s*length|bước sóng|buoc song|^λ|^wl\b|^\(?nm\)?\.?$/i;
+const RE_ABS = /\babs\b|abs\.|absorb|^a$|độ hấp thụ|do hap thu|^od\b|o\.d\./i;
+const RE_NOT = /%\s*[tr]\b|transmi|reflect|^[tr]$|\bstd\b|\bsd\b|error|time|date|ghi chú|note/i;
+
+const state = { entries: [], demo: true, csv: false, mode: 'interp', lambdas: [664], sel: null, sort: { col: 'name', dir: 1 } };
+
+/* ---------- parsing ---------- */
+function toNum(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+  const s = v.trim().replace(/^(-?\d+),(\d+)$/, '$1.$2');
+  if (!/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(s)) return null;
+  return parseFloat(s);
+}
+const inRange = x => x !== null && x >= 100 && x <= 4000;
+const colName = i => { let s = ''; for (i++; i > 0; i = (i - 1) / 26 | 0) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+
+/* Reads pairs from startRow down; stops at the first text cell in the wavelength column. */
+function readPairs(rows, startRow, kx, ky) {
+  const xs = [], ys = [];
+  for (let r = startRow; r < rows.length; r++) {
+    const row = rows[r] || [], rawX = row[kx];
+    if (rawX === null || rawX === undefined || rawX === '') continue;
+    const x = toNum(rawX);
+    if (x === null) { if (xs.length) break; continue; }
+    const y = toNum(row[ky]);
+    if (y === null || !inRange(x)) continue;
+    xs.push(x); ys.push(y);
+  }
+  return tidy(xs, ys);
+}
+function tidy(xs, ys) {
+  const idx = xs.map((_, i) => i).sort((a, b) => xs[a] - xs[b]);
+  const x = [], y = [];
+  for (const i of idx) { if (x.length && x[x.length - 1] === xs[i]) continue; x.push(xs[i]); y.push(ys[i]); }
+  return { x, y };
+}
+function parseSheet(rows) {
+  let sawWlHeader = false;
+  for (let h = 0; h < Math.min(rows.length, 300); h++) {
+    const hdr = (rows[h] || []).map(c => typeof c === 'string' ? c.trim() : '');
+    const wlCols = hdr.map((c, i) => RE_WL.test(c) ? i : -1).filter(i => i >= 0);
+    if (!wlCols.length) continue;
+    const found = [];
+    let wlOk = false;
+    wlCols.forEach((k, n) => {
+      const end = n + 1 < wlCols.length ? wlCols[n + 1] : hdr.length;
+      if (readWlCount(rows, h + 1, k) < 3) return;
+      wlOk = true;
+      const labelled = [];
+      for (let c = k + 1; c < end; c++) { if (hdr[c] && RE_ABS.test(hdr[c]) && !RE_NOT.test(hdr[c])) labelled.push(c); }
+      const cols = labelled.length ? labelled : range(k + 1, end).filter(c => hdr[c] && !RE_NOT.test(hdr[c]));
+      for (const c of cols) {
+        const { x, y } = readPairs(rows, h + 1, k, c);
+        if (x.length < 3) continue;
+        const generic = RE_ABS.test(hdr[c]) && hdr[c].length <= 18;
+        const above = h > 0 ? firstText((rows[h - 1] || []), k, c) : '';
+        found.push({ x, y, label: generic ? above : hdr[c], guessed: false, col: colName(c) });
+      }
+    });
+    if (wlOk) { sawWlHeader = true; if (found.length) return { spectra: found }; return { spectra: [], reason: 'Có cột bước sóng nhưng không có cột Abs (có thể file đang ở dạng %T)' }; }
+  }
+  return headerless(rows) || { spectra: [], reason: sawWlHeader ? 'Không đọc được dữ liệu phổ' : 'Không tìm thấy cột bước sóng và Abs' };
+}
+function readWlCount(rows, start, k) {
+  let n = 0;
+  for (let r = start; r < rows.length && n < 5; r++) {
+    const v = (rows[r] || [])[k];
+    if (v === null || v === undefined || v === '') continue;
+    if (inRange(toNum(v))) n++; else break;
+  }
+  return n;
+}
+const range = (a, b) => Array.from({ length: Math.max(0, b - a) }, (_, i) => a + i);
+function firstText(row, a, b) {
+  for (const i of [b, a]) { const c = row[i]; if (typeof c === 'string' && c.trim() && toNum(c) === null) return c.trim(); }
+  return '';
+}
+/* No header row: take the longest numeric block and use its monotonic column as wavelength. */
+function headerless(rows) {
+  let best = null, s = -1;
+  const flush = e => { if (s >= 0 && (!best || e - s > best.e - best.s)) best = { s, e }; };
+  rows.forEach((row, r) => {
+    const n = (row || []).filter(c => toNum(c) !== null).length;
+    if (n >= 2) { if (s < 0) s = r; } else { flush(r); s = -1; }
+  });
+  flush(rows.length);
+  if (!best || best.e - best.s < 5) return null;
+  const width = Math.max(...rows.slice(best.s, best.e).map(r => (r || []).length));
+  let k = -1;
+  for (let c = 0; c < width && k < 0; c++) {
+    const v = rows.slice(best.s, best.e).map(r => toNum((r || [])[c]));
+    if (v.some(x => !inRange(x))) continue;
+    const up = v.every((x, i) => !i || x > v[i - 1]), down = v.every((x, i) => !i || x < v[i - 1]);
+    if (up || down) k = c;
+  }
+  if (k < 0) return null;
+  const spectra = [];
+  for (let c = k + 1; c < width; c++) {
+    const { x, y } = readPairs(rows.slice(best.s, best.e), 0, k, c);
+    if (x.length >= 3) spectra.push({ x, y, label: width - k > 2 ? 'Cột ' + colName(c) : '', guessed: true, col: colName(c) });
+  }
+  return spectra.length ? { spectra } : null;
+}
+
+async function readEntry(file, path) {
+  const name = path || file.name, base = name.split('/').pop();
+  const kind = /^~\$/.test(base) ? 'other' : EXCEL.test(base) ? 'excel' : CSV.test(base) ? 'csv' : 'other';
+  const e = { name, base, kind, size: file.size, spectra: [], sheets: [], reason: '' };
+  if (kind === 'other') { e.reason = /^~\$/.test(base) ? 'File khóa tạm của Excel' : 'Không phải file Excel'; return e; }
+  try {
+    if (!window.XLSX) throw new Error('nolib');
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', raw: kind === 'csv' });
+    for (const sn of wb.SheetNames) ingest(e, sn, XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: null, blankrows: true }));
+    if (!e.spectra.length && !e.reason) e.reason = 'File không có dữ liệu';
+  } catch (err) {
+    e.reason = err.message === 'nolib' ? 'Chưa tải được bộ đọc Excel, hãy kiểm tra mạng rồi tải lại trang' : 'Không mở được file (có thể bị hỏng hoặc đặt mật khẩu)';
+  }
+  return e;
+}
+function ingest(e, sn, rows) {
+  const res = parseSheet(rows);
+  e.sheets.push({ name: sn, preview: rows.slice(0, 40).map(r => (r || []).slice(0, 12)), total: rows.length });
+  res.spectra.forEach((s, i) => e.spectra.push({ ...s, id: e.name + '|' + sn + '|' + i, file: e, sheet: sn }));
+  if (!res.spectra.length && res.reason && !e.spectra.length) e.reason = res.reason;
+}
+
+/* ---------- value lookup ---------- */
+function valueAt(s, L, mode) {
+  const { x, y } = s, n = x.length;
+  if (L < x[0] - 1e-9 || L > x[n - 1] + 1e-9) {
+    if (mode === 'near') { const i = L < x[0] ? 0 : n - 1; return { v: y[i], at: x[i], how: 'near', far: true }; }
+    return { v: null, how: 'out' };
+  }
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (x[m] <= L) lo = m; else hi = m; }
+  for (const i of [lo, hi]) if (Math.abs(x[i] - L) < 1e-6) return { v: y[i], at: x[i], how: 'exact' };
+  if (mode === 'near') { const i = L - x[lo] <= x[hi] - L ? lo : hi; return { v: y[i], at: x[i], how: 'near' }; }
+  return { v: y[lo] + (y[hi] - y[lo]) * (L - x[lo]) / (x[hi] - x[lo]), how: 'interp' };
+}
+function parseLambdas(text) {
+  const t = text.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
+  const parts = t.split(/[\s,;]+/).filter(Boolean);
+  const out = [], bad = [];
+  for (const p of parts) { const v = toNum(p); if (inRange(v)) { if (!out.includes(v)) out.push(v); } else bad.push(p); }
+  return { out: out.slice(0, 12), bad };
+}
+
+/* ---------- views ---------- */
+const visible = () => state.entries.filter(e => e.kind === 'excel' || (e.kind === 'csv' && state.csv));
+const allSpectra = () => visible().flatMap(e => e.spectra);
+const fmt = (v, d = 4) => v === null || v === undefined ? '' : v.toFixed(d);
+const fmtL = v => String(+v.toFixed(3));
+const sampleOf = s => [s.file.sheets.length > 1 ? s.sheet : '', s.label].filter(Boolean).join(' · ');
+
+function sortedSpectra() {
+  const list = allSpectra(), { col, dir } = state.sort;
+  const key = s => { if (col === 'name') return null; const r = valueAt(s, state.lambdas[col], state.mode); return r.v; };
+  return list.sort((a, b) => {
+    if (col !== 'name') { const va = key(a), vb = key(b); if (va === null && vb === null) return 0; if (va === null) return 1; if (vb === null) return -1; return (va - vb) * dir; }
+    return (a.file.name.localeCompare(b.file.name, 'vi', { numeric: true }) || sampleOf(a).localeCompare(sampleOf(b), 'vi', { numeric: true })) * dir;
+  });
+}
+function renderTally() {
+  const n = t => state.entries.filter(e => e.kind === t).length;
+  const ok = visible().filter(e => e.spectra.length).length;
+  $('tally').innerHTML = `<span>Đã nhận <b>${state.entries.length}</b> file</span><span>Excel <b>${n('excel')}</b></span><span>Đọc được phổ <b>${ok}</b></span><span>CSV <b>${n('csv')}</b></span><span>Bỏ qua <b>${n('other')}</b></span><label><input type="checkbox" id="csvToggle" ${state.csv ? 'checked' : ''}> Tính cả file CSV</label>`;
+  $('csvToggle').onchange = ev => { state.csv = ev.target.checked; renderAll(); };
+  $('demoNote').hidden = !state.demo;
+}
+function renderTable() {
+  const list = sortedSpectra(), L = state.lambdas;
+  const arrow = c => state.sort.col === c ? (state.sort.dir > 0 ? ' ↑' : ' ↓') : '';
+  $('resTitle').textContent = list.length ? `Kết quả: ${list.length} phổ` : 'Kết quả';
+  if (!list.length) { $('tableBox').innerHTML = `<div class="empty">Chưa có phổ nào để tra. Thả file Excel từ máy UV-Vis vào khung phía trên.</div>`; return; }
+  const head = `<tr><th data-col="name">File${arrow('name')}</th>` + L.map((l, i) => `<th class="num" data-col="${i}">Abs @ ${fmtL(l)} nm${arrow(i)}</th>`).join('') + '</tr>';
+  const body = list.map(s => {
+    const sub = sampleOf(s);
+    const cells = L.map(l => {
+      const r = valueAt(s, l, state.mode);
+      if (r.how === 'out') return `<td class="num"><span class="none">ngoài dải đo</span></td>`;
+      const note = r.how === 'interp' ? 'nội suy' : r.how === 'near' ? `lấy tại ${fmtL(r.at)} nm` : '';
+      return `<td class="num">${fmt(r.v)}${note ? `<small>${note}</small>` : ''}</td>`;
+    }).join('');
+    return `<tr data-id="${esc(s.id)}" tabindex="0" class="${s.id === state.sel ? 'sel' : ''}"><td class="name">${esc(s.file.name)}${s.guessed ? '<span class="tag">tự đoán cột</span>' : ''}${sub ? `<small>${esc(sub)}</small>` : ''}</td>${cells}</tr>`;
+  }).join('');
+  $('tableBox').innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  $('tableBox').querySelectorAll('th').forEach(th => th.onclick = () => {
+    const c = th.dataset.col === 'name' ? 'name' : +th.dataset.col;
+    state.sort = { col: c, dir: state.sort.col === c ? -state.sort.dir : 1 };
+    renderTable();
+  });
+  $('tableBox').querySelectorAll('tbody tr').forEach(tr => {
+    tr.onclick = () => select(tr.dataset.id);
+    tr.onkeydown = ev => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); select(tr.dataset.id); } };
+  });
+}
+function select(id) { state.sel = id; renderTable(); renderChart(); renderRaw(); }
+function currentSpectrum() {
+  const list = allSpectra();
+  let s = list.find(x => x.id === state.sel);
+  if (!s && list.length) { s = sortedSpectra()[0]; state.sel = s.id; }
+  return s;
+}
+function niceTicks(a, b, n) {
+  const span = (b - a) || 1, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 5, 10].map(m => m * mag).find(m => m >= raw);
+  const t = []; for (let v = Math.ceil(a / step) * step; v <= b + step * 1e-6; v += step) t.push(+v.toFixed(8));
+  return { t, step };
+}
+/* Approximate colour the eye sees at a wavelength (Bruton's mapping). */
+function wlColor(w) {
+  let r = 0, g = 0, b = 0;
+  if (w < 440) { r = (440 - w) / 60; b = 1; } else if (w < 490) { g = (w - 440) / 50; b = 1; }
+  else if (w < 510) { g = 1; b = (510 - w) / 20; } else if (w < 580) { r = (w - 510) / 70; g = 1; }
+  else if (w < 645) { r = 1; g = (645 - w) / 65; } else r = 1;
+  const f = w < 420 ? .3 + .7 * (w - 380) / 40 : w > 700 ? .3 + .7 * (750 - w) / 50 : 1;
+  const c = v => Math.round(255 * Math.pow(v * f, .8));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
+function renderChart() {
+  const box = $('chartBox'), list = allSpectra(), cur = currentSpectrum();
+  $('selName').textContent = cur ? cur.file.name + (sampleOf(cur) ? ' · ' + sampleOf(cur) : '') : 'Phổ';
+  if (!cur) { box.innerHTML = `<div class="empty">Phổ sẽ hiện ở đây sau khi bạn thả file.</div>`; return; }
+  const W = Math.max(320, box.clientWidth - 16), H = Math.round(Math.min(420, Math.max(270, W * .62)));
+  const m = { l: 50, r: 14, t: 26, b: 42 }, pw = W - m.l - m.r, ph = H - m.t - m.b;
+  const xmin = Math.min(...list.map(s => s.x[0])), xmax = Math.max(...list.map(s => s.x[s.x.length - 1]));
+  let ymin = 0, ymax = 0;
+  for (const s of list) for (const v of s.y) { if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
+  if (ymax <= ymin) ymax = ymin + 1;
+  const yT = niceTicks(ymin, ymax, 5), xT = niceTicks(xmin, xmax, W < 500 ? 5 : 8);
+  ymax = Math.max(ymax, yT.t[yT.t.length - 1]); ymin = Math.min(ymin, yT.t[0]);
+  const sx = v => m.l + (v - xmin) / (xmax - xmin || 1) * pw, sy = v => m.t + (ymax - v) / (ymax - ymin) * ph;
+  const path = s => 'M' + s.x.map((v, i) => sx(v).toFixed(1) + ' ' + sy(s.y[i]).toFixed(1)).join('L');
+  const bandA = Math.max(380, xmin), bandB = Math.min(750, xmax);
+  let band = '', defs = '';
+  if (bandB > bandA) {
+    const stops = range(0, 38).map(i => { const w = 380 + i * 10; return w < bandA || w > bandB ? '' : `<stop offset="${((w - bandA) / (bandB - bandA)).toFixed(4)}" stop-color="${wlColor(w)}"/>`; }).join('');
+    defs = `<defs><linearGradient id="vis">${stops}</linearGradient></defs>`;
+    band = `<rect x="${sx(bandA).toFixed(1)}" y="${m.t + ph + 1}" width="${(sx(bandB) - sx(bandA)).toFixed(1)}" height="6" fill="url(#vis)"/>`;
+  }
+  const marks = state.lambdas.filter(l => l >= xmin && l <= xmax).map(l => {
+    const r = valueAt(cur, l, state.mode), px = sx(l);
+    const anchor = px > W - 60 ? 'end' : px < m.l + 40 ? 'start' : 'middle';
+    const dot = r.v === null ? '' : `<circle cx="${px.toFixed(1)}" cy="${sy(r.v).toFixed(1)}" r="4.5" fill="var(--accent)" stroke="var(--panel)" stroke-width="2"/>`;
+    return `<line x1="${px.toFixed(1)}" x2="${px.toFixed(1)}" y1="${m.t}" y2="${m.t + ph}" stroke="var(--accent)" stroke-dasharray="4 3"/>${dot}<text class="mk" x="${px.toFixed(1)}" y="${m.t - 9}" text-anchor="${anchor}">${fmtL(l)}${r.v === null ? '' : ' · ' + fmt(r.v, 3)}</text>`;
+  }).join('');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Phổ UV-Vis của ${esc(cur.file.name)}">${defs}
+    ${yT.t.map(v => `<line x1="${m.l}" x2="${W - m.r}" y1="${sy(v).toFixed(1)}" y2="${sy(v).toFixed(1)}" stroke="var(--grid)"/><text x="${m.l - 7}" y="${(sy(v) + 4).toFixed(1)}" text-anchor="end">${+v.toFixed(3)}</text>`).join('')}
+    ${list.filter(s => s !== cur).map(s => `<path d="${path(s)}" fill="none" stroke="var(--trace)" stroke-width="1"/>`).join('')}
+    ${band}
+    ${xT.t.map(v => `<text x="${sx(v).toFixed(1)}" y="${m.t + ph + 21}" text-anchor="middle">${+v.toFixed(2)}</text>`).join('')}
+    <text x="${m.l + pw / 2}" y="${H - 5}" text-anchor="middle">Bước sóng (nm)</text>
+    <text transform="translate(12 ${m.t + ph / 2}) rotate(-90)" text-anchor="middle">Abs</text>
+    <path d="${path(cur)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+    ${marks}
+    <line id="cross" y1="${m.t}" y2="${m.t + ph}" stroke="var(--muted)" visibility="hidden"/>
+  </svg><div class="tip" id="tip" hidden></div>`;
+  const svg = box.querySelector('svg'), cross = $('cross'), tip = $('tip');
+  const toWl = ev => { const b = svg.getBoundingClientRect(); const px = (ev.clientX - b.left) / b.width * W; return { wl: xmin + (px - m.l) / pw * (xmax - xmin), px, k: b.width / W }; };
+  svg.onpointermove = ev => {
+    const { wl, px, k } = toWl(ev);
+    if (wl < xmin || wl > xmax) { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; return; }
+    const r = valueAt(cur, wl, 'near');
+    cross.setAttribute('x1', px); cross.setAttribute('x2', px); cross.setAttribute('visibility', 'visible');
+    tip.hidden = false;
+    tip.textContent = r.far ? `${fmtL(wl)} nm: ngoài dải` : `${fmtL(r.at)} nm · ${fmt(r.v)}`;
+    tip.style.left = Math.min(Math.max(px * k + 8, 70), box.clientWidth - 70) + 'px';
+    tip.style.top = (r.far ? m.t : sy(r.v)) * k + 8 + 'px';
+  };
+  svg.onpointerleave = () => { cross.setAttribute('visibility', 'hidden'); tip.hidden = true; };
+  svg.onclick = ev => {
+    const { wl } = toWl(ev);
+    if (wl < xmin || wl > xmax) return;
+    const r = valueAt(cur, wl, 'near');
+    if (r.at === undefined) return;
+    $('lambda').value = fmtL(r.at); applyLambda();
+  };
+}
+function renderRaw() {
+  const cur = currentSpectrum(), box = $('raw');
+  $('rawBox').hidden = !cur;
+  if (!cur) return;
+  const sh = cur.file.sheets.find(x => x.name === cur.sheet);
+  const rows = sh ? sh.preview : [];
+  box.innerHTML = `<div class="hint">Trang tính “${esc(cur.sheet)}”, ${rows.length}/${sh ? sh.total : 0} dòng đầu${cur.col ? `, Abs lấy ở cột ${cur.col}` : ''}.</div><table><tbody>` +
+    rows.map(r => '<tr>' + r.map(c => `<td>${esc(c)}</td>`).join('') + '</tr>').join('') + '</tbody></table>';
+}
+function renderIssues() {
+  const bad = state.entries.filter(e => !e.spectra.length || (e.kind === 'csv' && !state.csv));
+  $('issueBox').hidden = !bad.length;
+  $('issueSum').textContent = `File không được tính (${bad.length})`;
+  $('issues').innerHTML = bad.map(e => `<li>${esc(e.name)} <span>: ${esc(e.kind === 'csv' && !state.csv && e.spectra.length ? 'File CSV, bật “Tính cả file CSV” để dùng' : e.reason)}</span></li>`).join('');
+}
+function renderAll() { renderTally(); currentSpectrum(); renderTable(); renderChart(); renderRaw(); renderIssues(); }
+
+/* ---------- input ---------- */
+function applyLambda() {
+  const { out, bad } = parseLambdas($('lambda').value), hint = $('lambdaHint');
+  if (bad.length) { hint.textContent = `“${bad.join(', ')}” không phải bước sóng hợp lệ. Hãy nhập số từ 100 đến 4000 nm.`; hint.classList.add('err'); }
+  else { hint.textContent = 'Nhập nhiều bước sóng bằng dấu phẩy hoặc khoảng trắng, ví dụ 260, 280. Số lẻ viết 664.5 hoặc 664,5.'; hint.classList.remove('err'); }
+  if (!out.length && !bad.length) return;
+  if (out.length) {
+    state.lambdas = out;
+    if (state.sort.col !== 'name' && state.sort.col >= out.length) state.sort = { col: 'name', dir: 1 };
+    renderTable(); renderChart();
+  }
+}
+$('lambda').addEventListener('input', applyLambda);
+$('form').addEventListener('submit', ev => { ev.preventDefault(); applyLambda(); });
+function setMode(mode) {
+  state.mode = mode;
+  $('modeInterp').setAttribute('aria-pressed', mode === 'interp');
+  $('modeNear').setAttribute('aria-pressed', mode === 'near');
+  renderTable(); renderChart();
+}
+$('modeInterp').onclick = () => setMode('interp');
+$('modeNear').onclick = () => setMode('near');
+
+async function addFiles(items) {
+  if (!items.length) return;
+  if (state.demo) { state.entries = []; state.demo = false; state.sel = null; }
+  const seen = new Set(state.entries.map(e => e.name + '|' + e.size));
+  let i = 0;
+  for (const { file, path } of items) {
+    i++;
+    $('actionMsg').textContent = `Đang đọc ${i}/${items.length}: ${path || file.name}`;
+    const key = (path || file.name) + '|' + file.size;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    state.entries.push(await readEntry(file, path));
+  }
+  $('actionMsg').textContent = '';
+  renderAll();
+}
+const fromInput = ev => { const f = [...ev.target.files].map(file => ({ file, path: file.webkitRelativePath || '' })); ev.target.value = ''; addFiles(f); };
+$('fileInput').onchange = fromInput;
+$('folderInput').onchange = fromInput;
+$('pickFiles').onclick = () => $('fileInput').click();
+$('pickFolder').onclick = () => $('folderInput').click();
+$('clearAll').onclick = () => { state.entries = []; state.demo = false; state.sel = null; renderAll(); };
+
+async function walk(entry, prefix, out) {
+  if (entry.isFile) { const file = await new Promise((res, rej) => entry.file(res, rej)); out.push({ file, path: prefix + entry.name }); return; }
+  if (!entry.isDirectory) return;
+  const reader = entry.createReader();
+  for (;;) {
+    const batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+    if (!batch.length) break;
+    for (const e of batch) await walk(e, prefix + entry.name + '/', out);
+  }
+}
+window.addEventListener('dragover', ev => { ev.preventDefault(); $('drop').classList.add('over'); });
+window.addEventListener('dragleave', ev => { if (!ev.relatedTarget) $('drop').classList.remove('over'); });
+window.addEventListener('drop', async ev => {
+  ev.preventDefault(); $('drop').classList.remove('over');
+  const dt = ev.dataTransfer;
+  const entries = [...(dt.items || [])].map(it => it.webkitGetAsEntry && it.webkitGetAsEntry()).filter(Boolean);
+  const plain = [...dt.files];
+  const out = [];
+  if (entries.length) { for (const e of entries) await walk(e, '', out); }
+  else plain.forEach(file => out.push({ file, path: '' }));
+  addFiles(out);
+});
+
+/* ---------- export ---------- */
+function exportRows() {
+  const L = state.lambdas;
+  const head = ['File', 'Sheet', 'Mẫu', ...L.map(l => `Abs @ ${fmtL(l)} nm`), 'Ghi chú'];
+  const rows = sortedSpectra().map(s => {
+    const notes = [];
+    const vals = L.map(l => {
+      const r = valueAt(s, l, state.mode);
+      if (r.how === 'out') notes.push(`${fmtL(l)} nm ngoài dải đo`);
+      if (r.how === 'interp') notes.push(`${fmtL(l)} nm nội suy`);
+      if (r.how === 'near') notes.push(`${fmtL(l)} nm lấy tại ${fmtL(r.at)} nm`);
+      return r.v === null ? '' : +r.v.toFixed(6);
+    });
+    return [s.file.name, s.sheet, s.label, ...vals, notes.join('; ')];
+  });
+  return [head, ...rows];
+}
+$('copyBtn').onclick = async () => {
+  const txt = exportRows().map(r => r.join('\t')).join('\n'), msg = $('actionMsg');
+  try { await navigator.clipboard.writeText(txt); msg.textContent = 'Đã sao chép. Dán vào Excel bằng Ctrl+V.'; }
+  catch { msg.textContent = 'Trình duyệt chặn sao chép. Hãy bôi đen bảng rồi nhấn Ctrl+C.'; }
+};
+$('saveBtn').onclick = () => {
+  const msg = $('actionMsg');
+  try {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exportRows()), 'Abs');
+    XLSX.writeFile(wb, `Abs_${state.lambdas.map(fmtL).join('_')}nm.xlsx`);
+    msg.textContent = 'Đã tải file.';
+  } catch {
+    msg.textContent = 'Không tạo được file. Hãy kiểm tra mạng, tải lại trang, hoặc dùng nút Sao chép sang Excel.';
+  }
+};
+
+/* ---------- example data ---------- */
+function demo() {
+  const gauss = (w, c, s) => Math.exp(-((w - c) ** 2) / (2 * s * s));
+  [[0, 1], [15, .72], [30, .49], [45, .31], [60, .18], [90, .07]].forEach(([t, k]) => {
+    const rows = [['Sample', `MB ${t} min (ví dụ)`], ['Wavelength range (nm)', '800 - 200'], [], ['Wavelength (nm)', 'Abs.']];
+    for (let w = 800; w >= 200; w--) rows.push([w, +(k * (1.42 * gauss(w, 664, 19) + .62 * gauss(w, 612, 24) + .55 * gauss(w, 292, 16) + .34 * gauss(w, 246, 13)) + .012 + .22 * gauss(w, 200, 26)).toFixed(4)]);
+    const e = { name: `MB_${t}min.xlsx`, base: `MB_${t}min.xlsx`, kind: 'excel', size: 0, spectra: [], sheets: [], reason: '' };
+    ingest(e, 'Data', rows);
+    state.entries.push(e);
+  });
+  state.entries.push({ name: 'ghi_chu_thi_nghiem.docx', base: 'ghi_chu_thi_nghiem.docx', kind: 'other', size: 0, spectra: [], sheets: [], reason: 'Không phải file Excel' });
+}
+demo();
+renderAll();
+let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(renderChart, 80); }).observe($('chartBox').parentElement);
+</script>
+</body>
+</html>
